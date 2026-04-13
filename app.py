@@ -288,6 +288,48 @@ def dashboard():
         st.subheader("Uploaded Data Preview")
         st.dataframe(df)
 
+        # ASK FEATURE
+        st.subheader("🤖 Ask About Your Data")
+
+        question = st.text_input("Ask something like: total income, profit, loss, highest expense")
+
+        if question:
+            question = question.lower()
+
+            if "total income" in question:
+                st.success(f"Total Income is ₹ {total_income:.2f}")
+
+            elif "total expense" in question:
+                st.success(f"Total Expense is ₹ {total_expense:.2f}")
+
+            elif "profit" in question:
+                if profit >= 0:
+                    st.success(f"Total Profit is ₹ {profit:.2f}")
+                else:
+                    st.warning("Currently in Loss.")
+
+            elif "loss" in question:
+                if profit < 0:
+                    st.error(f"Total Loss is ₹ {abs(profit):.2f}")
+                else:
+                    st.success("No Loss. You are in Profit!")
+
+            elif "balance" in question:
+                st.success(f"Current Balance is ₹ {profit:.2f}")
+
+            elif "highest expense" in question:
+                max_exp = expense_data.sort_values("Amount", ascending=False).head(1)
+                if not max_exp.empty:
+                    row = max_exp.iloc[0]
+                    st.success(f"Highest Expense: ₹ {row['Amount']} in {row['Category']}")
+                else:
+                    st.info("No expense data found.")
+
+            else:
+                st.info("Try asking: total income, total expense, profit, loss, balance, highest expense")
+
+    else:
+        st.info("Upload a file to view dashboard.")
 # ---------------- FORECASTING PAGE ----------------
 def forecasting_page():
 
