@@ -291,7 +291,7 @@ def dashboard():
         # ASK FEATURE
         st.subheader("🤖 Ask About Your Data")
 
-        question = st.text_input("Ask something like: total income, profit, loss, highest expense")
+        question = st.text_input("Ask something like:profit, loss")
 
         if question:
             question = question.lower()
