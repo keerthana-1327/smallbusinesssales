@@ -58,20 +58,25 @@ def login_page():
 
     if st.button("Login"):
 
-        user = session.query(User).filter_by(username=username).first()
+        # 🔥 FIX: Case-insensitive username search
+        user = session.query(User).filter(User.username.ilike(username)).first()
 
-        if user and user.password == hash_password(password):
+        if user:
+            # 🔥 FIX: Compare hashed password correctly
+            if user.password == hash_password(password):
 
-            st.session_state.logged_in = True
-            st.session_state.username = username
-            st.session_state.role = user.role
+                st.session_state.logged_in = True
+                st.session_state.username = user.username   # use DB value
+                st.session_state.role = user.role
 
-            st.success("Login Successful")
-            st.rerun()
+                st.success("Login Successful")
+                st.rerun()
+
+            else:
+                st.error("Invalid Username or Password")
 
         else:
             st.error("Invalid Username or Password")
-
 # ---------------- REGISTER ----------------
 def register_page():
 
@@ -102,7 +107,6 @@ def register_page():
 
             st.success("Registration Successful! Please login.")
 
-# ---------------- DATA UPDATE ----------------
 def data_update():
 
     st.title("📝 Manual Finance Entry")
@@ -127,6 +131,7 @@ def data_update():
 
         st.success("Record Added Successfully")
 
+    # 🔥 FETCH ALL USER DATA (FIXED)
     data = session.query(Finance).filter_by(
         username=st.session_state.username
     ).all()
@@ -140,9 +145,15 @@ def data_update():
             "Amount": d.amount
         } for d in data])
 
-        st.subheader("Saved Records")
-        st.dataframe(df)
+        # ✅ FIX: Convert & sort
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date", ascending=False)
 
+        st.subheader("Saved Records")
+        st.dataframe(df, use_container_width=True)
+
+    else:
+        st.info("No records found. Add your first entry.")
 # ---------------- DASHBOARD ----------------
 def dashboard():
 
@@ -291,16 +302,16 @@ def dashboard():
         # ASK FEATURE
         st.subheader("🤖 Ask About Your Data")
 
-        question = st.text_input("Ask something like:profit, loss")
+        question = st.text_input("Ask something like: total income, profit, loss, highest expense")
 
         if question:
             question = question.lower()
 
             if "total income" in question:
-                st.success(f"Total Income is ₹ {total_income:.2f}")
+                st.success(f"Total Income is ₹ {income:.2f}")
 
             elif "total expense" in question:
-                st.success(f"Total Expense is ₹ {total_expense:.2f}")
+                st.success(f"Total Expense is ₹ {expense:.2f}")
 
             elif "profit" in question:
                 if profit >= 0:
@@ -318,8 +329,8 @@ def dashboard():
                 st.success(f"Current Balance is ₹ {profit:.2f}")
 
             elif "highest expense" in question:
-                max_exp = expense_data.sort_values("Amount", ascending=False).head(1)
-                if not max_exp.empty:
+                if not expense_df.empty:  # ✅ FIX
+                    max_exp = expense_df.sort_values("Amount", ascending=False).head(1)
                     row = max_exp.iloc[0]
                     st.success(f"Highest Expense: ₹ {row['Amount']} in {row['Category']}")
                 else:
@@ -328,8 +339,6 @@ def dashboard():
             else:
                 st.info("Try asking: total income, total expense, profit, loss, balance, highest expense")
 
-    else:
-        st.info("Upload a file to view dashboard.")
 # ---------------- FORECASTING PAGE ----------------
 def forecasting_page():
 
@@ -405,6 +414,52 @@ def forecasting_page():
         # -------- DATA PREVIEW --------
         st.subheader("Uploaded Data Preview")
         st.dataframe(df)
+
+        # -------- CALCULATE VALUES (FIX ADDED) --------
+        income = df[df["Type"] == "Income"]["Amount"].sum()
+        expense = df[df["Type"] == "Expense"]["Amount"].sum()
+        profit = income - expense
+        expense_df = df[df["Type"] == "Expense"].copy()
+
+        # ASK FEATURE
+        st.subheader("🤖 Ask About Your Data")
+
+        question = st.text_input("Ask something like: total income, profit, loss, highest expense")
+
+        if question:
+            question = question.lower()
+
+            if "total income" in question:
+                st.success(f"Total Income is ₹ {income:.2f}")
+
+            elif "total expense" in question:
+                st.success(f"Total Expense is ₹ {expense:.2f}")
+
+            elif "profit" in question:
+                if profit >= 0:
+                    st.success(f"Total Profit is ₹ {profit:.2f}")
+                else:
+                    st.warning("Currently in Loss.")
+
+            elif "loss" in question:
+                if profit < 0:
+                    st.error(f"Total Loss is ₹ {abs(profit):.2f}")
+                else:
+                    st.success("No Loss. You are in Profit!")
+
+            elif "balance" in question:
+                st.success(f"Current Balance is ₹ {profit:.2f}")
+
+            elif "highest expense" in question:
+                if not expense_df.empty:
+                    max_exp = expense_df.sort_values("Amount", ascending=False).head(1)
+                    row = max_exp.iloc[0]
+                    st.success(f"Highest Expense: ₹ {row['Amount']} in {row['Category']}")
+                else:
+                    st.info("No expense data found.")
+
+            else:
+                st.info("Try asking: total income, total expense, profit, loss, balance, highest expense")
 
 # ---------------- REPORT ----------------
 def report_page():
@@ -543,3 +598,6 @@ else:
         elif page == "Logout":
             st.session_state.clear()
             st.rerun()
+
+
+
