@@ -8,13 +8,13 @@ from prophet import Prophet
 
 st.set_page_config(page_title="Smart Finance Dashboard", layout="wide")
 
-# ---------------- DATABASE ----------------
+
 engine = create_engine("sqlite:///finance.db", echo=False)
 Session = sessionmaker(bind=engine)
 session = Session()
 Base = declarative_base()
 
-# ---------------- TABLES ----------------
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
@@ -35,7 +35,7 @@ class Finance(Base):
 
 Base.metadata.create_all(engine)
 
-# ---------------- AUTO FIX OLD DATABASE ----------------
+
 inspector = inspect(engine)
 columns = [col['name'] for col in inspector.get_columns('users')]
 
@@ -44,11 +44,11 @@ if "role" not in columns:
         conn.execute(text("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'"))
         conn.commit()
 
-# ---------------- PASSWORD HASH ----------------
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# ---------------- LOGIN ----------------
+
 def login_page():
 
     st.title("🔐 Login")
@@ -77,7 +77,8 @@ def login_page():
 
         else:
             st.error("Invalid Username or Password")
-# ---------------- REGISTER ----------------
+
+        
 def register_page():
 
     st.title("📝 Register")
@@ -154,7 +155,8 @@ def data_update():
 
     else:
         st.info("No records found. Add your first entry.")
-# ---------------- DASHBOARD ----------------
+
+
 def dashboard():
 
     st.title("📊 Smart Finance Dashboard")
@@ -339,7 +341,7 @@ def dashboard():
             else:
                 st.info("Try asking: total income, total expense, profit, loss, balance, highest expense")
 
-# ---------------- FORECASTING PAGE ----------------
+
 def forecasting_page():
 
     st.title("📦 Future Prediction")
@@ -372,7 +374,8 @@ def forecasting_page():
         fig = model.plot(forecast)
         st.pyplot(fig)
 
-        # -------- CREATE MONTHLY FORECAST (THIS WAS MISSING) --------
+        
+        
         future_data = forecast[forecast["ds"] > prophet_df["ds"].max()]
 
         future_data["Month"] = future_data["ds"].dt.to_period("M")
@@ -381,7 +384,7 @@ def forecasting_page():
 
         monthly_forecast["Month"] = monthly_forecast["Month"].astype(str)
 
-        # -------- LINE GRAPH --------
+       
         st.subheader("Forecast Line Graph")
 
         fig_line, ax_line = plt.subplots()
@@ -394,7 +397,7 @@ def forecasting_page():
 
         st.pyplot(fig_line)
 
-        # -------- BAR GRAPH --------
+        
         st.subheader("Forecast Bar Chart")
 
         fig_bar, ax_bar = plt.subplots()
@@ -407,15 +410,15 @@ def forecasting_page():
 
         st.pyplot(fig_bar)
 
-        # -------- TABLE --------
+        
         st.subheader("Forecast Table")
         st.dataframe(monthly_forecast)
 
-        # -------- DATA PREVIEW --------
+        
         st.subheader("Uploaded Data Preview")
         st.dataframe(df)
 
-        # -------- CALCULATE VALUES (FIX ADDED) --------
+      
         income = df[df["Type"] == "Income"]["Amount"].sum()
         expense = df[df["Type"] == "Expense"]["Amount"].sum()
         profit = income - expense
@@ -461,7 +464,7 @@ def forecasting_page():
             else:
                 st.info("Try asking: total income, total expense, profit, loss, balance, highest expense")
 
-# ---------------- REPORT ----------------
+
 def report_page():
 
     st.title("📑 Finance Report")
@@ -505,7 +508,7 @@ def report_page():
         "text/csv"
     )
 
-# ---------------- ADMIN PANEL ----------------
+
 def admin_page():
 
     if st.session_state.role != "admin":
@@ -514,17 +517,17 @@ def admin_page():
 
     st.title("🛠 Admin Panel")
 
+  
     total_users = session.query(User).count()
-
     income_count = session.query(Finance).filter_by(type="Income").count()
     expense_count = session.query(Finance).filter_by(type="Expense").count()
 
     c1, c2, c3 = st.columns(3)
-
     c1.metric("Total Users", total_users)
     c2.metric("Income Records", income_count)
     c3.metric("Expense Records", expense_count)
 
+  
     users = session.query(User).all()
 
     user_df = pd.DataFrame([{
@@ -533,14 +536,73 @@ def admin_page():
         "Role": u.role
     } for u in users])
 
-    st.subheader("All Users")
-    st.dataframe(user_df)
+    st.subheader("👥 All Users")
+    st.dataframe(user_df, use_container_width=True)
 
-# ---------------- SESSION ----------------
+    usernames = [u.username for u in users]
+
+  
+    st.subheader("🔑 Change User Password")
+
+    selected_user = st.selectbox("Select User", usernames, key="pwd_user")
+    new_password = st.text_input("New Password", type="password")
+
+    if st.button("Update Password"):
+        if new_password.strip() == "":
+            st.warning("Password cannot be empty")
+        else:
+            user = session.query(User).filter_by(username=selected_user).first()
+            if user:
+                user.password = hash_password(new_password)
+                session.commit()
+                st.success(f"Password updated for {selected_user}")
+
+   
+    st.subheader("🗑️ Delete User")
+
+    delete_user = st.selectbox("Select User to Delete", usernames, key="del_user")
+
+    if st.button("Delete User"):
+        if delete_user == st.session_state.username:
+            st.warning("You cannot delete your own account")
+        else:
+            user = session.query(User).filter_by(username=delete_user).first()
+            if user:
+                # delete user's finance data first
+                session.query(Finance).filter_by(username=delete_user).delete()
+                session.delete(user)
+                session.commit()
+                st.success(f"User '{delete_user}' deleted successfully")
+                st.rerun()
+
+   
+    st.subheader("📊 View User Finance Data")
+
+    view_user = st.selectbox("Select User to View Data", usernames, key="view_user")
+
+    if st.button("Load Data"):
+        data = session.query(Finance).filter_by(username=view_user).all()
+
+        if data:
+            df = pd.DataFrame([{
+                "Date": d.date,
+                "Category": d.category,
+                "Type": d.type,
+                "Amount": d.amount
+            } for d in data])
+
+            df["Date"] = pd.to_datetime(df["Date"])
+            df = df.sort_values("Date", ascending=False)
+
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No data available for this user")
+
+
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# ---------------- SIDEBAR ----------------
+
 st.sidebar.title("Navigation")
 
 # BEFORE LOGIN
